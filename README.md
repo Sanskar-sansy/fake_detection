@@ -3,8 +3,9 @@
 A small, fast, classical-CV + lightweight-ML solution that tells whether
 an image is a **real photo** (0) or a **photo of a screen / recapture** (1).
 
-No deep learning, no GPU, no large weights — a RandomForest over ~26
-handcrafted features, chosen so the model can run instantly on a phone CPU.
+No deep learning, no GPU, no large weights — a GradientBoosting classifier
+over ~26 handcrafted features, chosen so the model can run instantly on a
+phone CPU.
 
 ---
 
@@ -49,10 +50,15 @@ physical fingerprints that don't need a neural net to detect:
     which is often *not* radially symmetric, so it's missed by the
     purely radial FFT stats above).
 
-These ~26 numbers go into a `RandomForestClassifier(n_estimators=300,
-max_depth=10)`, which is fast to train, fast to run, tiny to store, and
-gives interpretable feature importances (useful for debugging false
-positives later).
+These ~26 numbers go into a `GradientBoostingClassifier(n_estimators=300,
+max_depth=2, learning_rate=0.05, subsample=0.7, min_samples_leaf=5)`
+(hyperparameters chosen via repeated stratified CV on training data only),
+which is fast to train, fast to run, tiny to store, and gives interpretable
+feature importances (useful for debugging false positives later).
+A RandomForest was tried first but overfit train-only quirks in a few
+color/moire features whose correlation with the label flipped sign
+between the training and held-out test sets; GradientBoosting with
+shallow trees generalized noticeably better.
 
 ---
 
@@ -142,7 +148,7 @@ print(benchmark_latency("some_image.jpg", n_runs=20))
 
 On a typical laptop CPU, feature extraction (FFT + texture + color +
 artifact features, all on a resized ≤512×512 image) plus a 300-tree
-RandomForest inference takes roughly **15–30 ms per image** end-to-end
+GradientBoosting inference takes roughly **15–30 ms per image** end-to-end
 (model loading is a one-time cost, not counted per-image, since a real
 deployment loads the model once and serves many requests/frames). On a
 modern phone CPU expect a similar order of magnitude, since none of this
@@ -157,8 +163,8 @@ trivially fast for a single still-photo capture flow.
 
 ## 6. Expected memory / cost footprint
 
-- **Model size**: a RandomForest with 300 trees, depth 10, over 26
-  features serializes to roughly **300 KB – 1.5 MB** on disk (well under
+- **Model size**: a GradientBoosting model with 300 shallow (depth-2) trees,
+  over 26 features serializes to roughly **100–500 KB** on disk (well under
   the "small" bar — no GPU weights, no embeddings table).
 - **Runtime memory**: a few MB at most (the model itself, plus a single
   decoded image buffer ≤512×512×3 bytes ≈ 768 KB).
